@@ -32,4 +32,32 @@ data Instructions n r =
       | Stop r             -- @
       deriving (Show, Functor, Eq)
 
+not          = liftF $ Not () 
+stringMode   = liftF $ TStringMode ()
+trampoline   = liftF $ Trampoline ()
+pop          = liftF $ Pop ()
+remainder    = liftF $ Remainder ()
+inputInt     = liftF $ InputInt ()
+mult         = liftF $ Mult ()
+add          = liftF $ Add ()
+outChar      = liftF $ OutChar ()
+divide       = liftF $ Div ()
+number n     = liftF $ Num n ()
+dup          = liftF $ Dup ()
+goWest       = liftF $ GoWest ()
+goEast       = liftF $ GoEast ()
+goNorth      = liftF $ GoNorth ()
+goSouth      = liftF $ GoSouth ()
+goAway       = liftF $ GoAway ()
+swap         = liftF $ Swap ()
+ifEastWest   = liftF $ IfEastWest ()
+greaterThan  = liftF $ GreaterThan ()
+get          = liftF $ Get ()
+put          = liftF $ Put ()
+ifNorthSouth = liftF $ IfNorthSouth ()
+inputChar    = liftF $ InputChar ()
+stop         = liftF $ Stop ()
+
+-- parse = 
+
 main = putStrLn "ok"
