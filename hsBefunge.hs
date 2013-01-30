@@ -58,6 +58,34 @@ ifNorthSouth = liftF $ IfNorthSouth ()
 inputChar    = liftF $ InputChar ()
 stop         = liftF $ Stop ()
 
+instructions = map 
+  [('!',not)
+  ,('"',stringMode)
+  ,('#',trampoline)
+  ,('$',pop)
+  ,('%',remainder)
+  ,('&',inputInt)
+  ,('*',mult)
+  ,('+',add)
+  ,(',',outChar)
+  ,('/',divider)
+  ,(':',dup)
+  ,('<',goWest)
+  ,('>',goEast)
+  ,('^',goNorth)
+  ,('v',goSouth)
+  ,('?',goAway)
+  ,('\',swap)
+  ,('_',ifEastWest)
+  ,('`',greaterThan)
+  ,('g',get)
+  ,('p',put)
+  ,('|',ifNorthSouth)
+  ,('~',inputChar)
+  ,('@',stop)]
+
+   
+
 -- parse = 
 
 main = putStrLn "ok"
