@@ -92,8 +92,8 @@ parse x = liftM (fromListVector (Z :. fst befungeDim :. snd befungeDim))
                    then l ++ replicate (fst befungeDim-length l) ' '
                    else l
         
-        addEmptyRows x = if length x < (uncurry (*) befungeDim)
-                         then x++replicate ((uncurry (*) befungeDim)-length x) ' '
+        addEmptyRows x = if length x < uncurry (*) befungeDim
+                         then x++replicate (uncurry (*) befungeDim-length x) ' '
                          else x
 
         getIns :: Bool -> String -> Maybe [Instructions Int Char ]
