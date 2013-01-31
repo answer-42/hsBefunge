@@ -2,90 +2,68 @@
 module Main where
 
 import Control.Monad
-import Control.Monad.Free
 
-data Instructions n r = 
-      Not r                -- !
-      | TStringMode r      -- "
-      | Trampoline r       -- #
-      | Pop r              -- $
-      | Remainder r        -- %
-      | InputInt r         -- &
-      | Mult r             -- *
-      | Add r              -- +
-      | OutChar r          -- ,
-      | Div r              -- /
-      | Num n r            -- 0-9
-      | Dup r              -- :
-      | GoWest r           -- <
-      | GoEast r           -- >
-      | GoNorth r          -- ^
-      | GoSouth r          -- v
-      | GoAway r           -- ?
-      | Swap r             -- \
-      | IfEastWest r       -- _
-      | GreaterThan r      -- `
-      | Get r              -- g
-      | Put r              -- p
-      | IfNorthSouth r     -- |
-      | InputChar r        -- ~
-      | Stop r             -- @
+import Prelude hiding (not)
+
+import qualified Data.Array.Repa as R
+import Data.Array.Repa.Repr.ForeignPtr
+
+{- TODO
+  - Make a field that we can parse, we will use a Repa Array for that.
+  -}
+
+data Instructions n = 
+      Not                -- !
+      | TStringMode      -- "
+      | Trampoline       -- #
+      | Pop              -- $
+      | Remainder        -- %
+      | InputInt         -- &
+      | Mult             -- *
+      | Add              -- +
+      | OutChar          -- ,
+      | Div              -- /
+      | Num n            -- 0-9
+      | Dup              -- :
+      | GoWest           -- <
+      | GoEast           -- >
+      | GoNorth          -- ^
+      | GoSouth          -- v
+      | GoAway           -- ?
+      | Swap             -- \
+      | IfEastWest       -- _
+      | GreaterThan      -- `
+      | Get              -- g
+      | Put              -- p
+      | IfNorthSouth     -- |
+      | InputChar        -- ~
+      | Stop             -- @
       deriving (Show, Functor, Eq)
 
-not          = liftF $ Not () 
-stringMode   = liftF $ TStringMode ()
-trampoline   = liftF $ Trampoline ()
-pop          = liftF $ Pop ()
-remainder    = liftF $ Remainder ()
-inputInt     = liftF $ InputInt ()
-mult         = liftF $ Mult ()
-add          = liftF $ Add ()
-outChar      = liftF $ OutChar ()
-divide       = liftF $ Div ()
-number n     = liftF $ Num n ()
-dup          = liftF $ Dup ()
-goWest       = liftF $ GoWest ()
-goEast       = liftF $ GoEast ()
-goNorth      = liftF $ GoNorth ()
-goSouth      = liftF $ GoSouth ()
-goAway       = liftF $ GoAway ()
-swap         = liftF $ Swap ()
-ifEastWest   = liftF $ IfEastWest ()
-greaterThan  = liftF $ GreaterThan ()
-get          = liftF $ Get ()
-put          = liftF $ Put ()
-ifNorthSouth = liftF $ IfNorthSouth ()
-inputChar    = liftF $ InputChar ()
-stop         = liftF $ Stop ()
-
-instructions = map 
-  [('!',not)
-  ,('"',stringMode)
-  ,('#',trampoline)
-  ,('$',pop)
-  ,('%',remainder)
-  ,('&',inputInt)
-  ,('*',mult)
-  ,('+',add)
-  ,(',',outChar)
-  ,('/',divider)
-  ,(':',dup)
-  ,('<',goWest)
-  ,('>',goEast)
-  ,('^',goNorth)
-  ,('v',goSouth)
-  ,('?',goAway)
-  ,('\',swap)
-  ,('_',ifEastWest)
-  ,('`',greaterThan)
-  ,('g',get)
-  ,('p',put)
-  ,('|',ifNorthSouth)
-  ,('~',inputChar)
-  ,('@',stop)]
-
-   
-
--- parse = 
+instructions = 
+  [('!',Not)
+  ,('"',TStringMode)
+  ,('#',Trampoline)
+  ,('$',Pop)
+  ,('%',Remainder)
+  ,('&',InputInt)
+  ,('*',Mult)
+  ,('+',Add)
+  ,(',',OutChar)
+  ,('/',Div)
+  ,(':',Dup)
+  ,('<',GoWest)
+  ,('>',GoEast)
+  ,('^',GoNorth)
+  ,('v',GoSouth)
+  ,('?',GoAway)
+  ,('\\',Swap)
+  ,('_',IfEastWest)
+  ,('`',GreaterThan)
+  ,('g',Get)
+  ,('p',Put)
+  ,('|',IfNorthSouth)
+  ,('~',InputChar)
+  ,('@',Stop)]
 
 main = putStrLn "ok"
