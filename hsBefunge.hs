@@ -6,7 +6,7 @@ import System.Environment (getArgs)
 import Control.Monad (mapM,liftM,liftM2)
 import Control.Monad.State
 
-import Data.Char (isAscii,isDigit,digitToInt)
+import Data.Char (isAscii,isDigit,digitToInt,intToDigit,chr)
 
 import qualified Data.Array.Repa as R
 import Data.Array.Repa.Index
@@ -121,8 +121,10 @@ push x = do p <- get
             put p{stack=(s++[x])}
 
 
--- pop :: BefungeState (Instructions Int Char)
-pop = undefined
+pop :: BefungeState
+pop = do p <- get
+         let s = stack p
+         put p{stack=init s}
 
 -- Evaluator
 
@@ -150,44 +152,85 @@ move = let (x,y) = befungeDim
                             South  -> Z:.(i+1)`mod`y:.j
              put p{currentPos=newPos}
 
-notB :: Instructions Int Char -> Instructions Int Char 
-notB (Num 0) = Num 1
-notB _     = Num 0
+notB :: BefungeState 
+notB = do p <- get
+          let s = stack p
+              a = last s
+          case a of
+            Num 0 -> put p{stack=tail s++[Num 1]}
+            _     -> put p{stack=tail s++[Num 0]}
 
-greaterThan :: Instructions Int Char -> Instructions Int Char -> Instructions Int Char
-greaterThan (Num a) (Num b) | a >= b    = Num 1
-                            | otherwise = Num 0
+greaterThan :: BefungeState 
+greaterThan = do p <- get
+                 let s = stack p
+                     (Num a) = last s
+                     (Num b) = last $ init s
+                 case compare a b of
+                   GT -> put p{stack=(init $ init s)++[Num 1]}
+                   _  -> put p{stack=(init $ init s)++[Num 0]}
 
-ifEastWest :: Instructions Int Char -> BefungeState 
-ifEastWest (Num 0) = goEast
-ifEastWest _       = goWest
+ifEastWest :: BefungeState 
+ifEastWest = do p <- get
+                let s = stack p
+                    (Num a) = last s
+                case a of
+                  0 -> goEast
+                  _ -> goWest
 
-ifNorthSouth :: Instructions Int Char -> BefungeState 
-ifNorthSouth (Num 0) = goSouth
-ifNorthSouth _       = goNorth
+ifNorthSouth :: BefungeState 
+ifNorthSouth = do p <- get
+                  let s = stack p
+                      (Num a) = last s
+                  case a of
+                    0 -> goSouth
+                    _ -> goNorth
 
-addB :: Instructions Int Char -> Instructions Int Char -> Instructions Int Char
-addB (Num a) (Num b) = Num $ a+b
-addB _ _             = undefined
+addB :: BefungeState
+addB = do p <- get
+          let s = stack p
+              (Num a) = last s
+              (Num b) = last $ init s
+          put p{stack=(init $ init s)++[Num $ a+b]} 
 
-multB :: Instructions Int Char -> Instructions Int Char -> Instructions Int Char
-multB (Num a) (Num b) = Num $ a*b
-multB _ _             = undefined
+multB :: BefungeState
+multB = do p <- get
+           let s = stack p
+               (Num a) = last s
+               (Num b) = last $ init s
+           put p{stack=(init $ init s)++[Num $ a*b]} 
 
-minB :: Instructions Int Char -> Instructions Int Char -> Instructions Int Char
-minB (Num a) (Num b) = Num $ a-b
-minB _ _             = undefined
+minB :: BefungeState
+minB = do p <- get
+          let s = stack p
+              (Num a) = last s
+              (Num b) = last $ init s
+          put p{stack=(init $ init s)++[Num $ a-b]} 
 
-remainderB :: Instructions Int Char -> Instructions Int Char -> Instructions Int Char
-remainderB (Num 0) (Num b) = Num 0
-remainderB (Num a) (Num b) = Num $ b `rem` a
-remainderB _ _             = undefined
+remainderB :: BefungeState
+remainderB = do p <- get
+                let s = stack p
+                    (Num a) = last s
+                    (Num b) = last $ init s
+                case a of
+                  0 -> put p{stack=(init $ init s)++[Num 0]} 
+                  _ -> put p{stack=(init $ init s)++[Num $ b `rem` a]} 
 
-divB :: Instructions Int Char -> Instructions Int Char -> Instructions Int Char
-divB (Num 0) (Num b) = Num 0
-divB (Num a) (Num b) = Num $ b `quot` a
-divB _ _             = undefined
+divB :: BefungeState
+divB = do p <- get
+          let s = stack p
+              (Num a) = last s
+              (Num b) = last $ init s
+          case a of
+            0 -> put p{stack=(init $ init s)++[Num 0]} 
+            _ -> put p{stack=(init $ init s)++[Num $ b `quot` a]} 
 
+outChar :: BefungeState
+outChar = do p <- get
+             let s = stack p
+             case last s of
+               Num a       -> liftIO $ putChar $ chr a
+               Character a -> liftIO $ putChar a
+             put p{stack=init s}
 
 evalBefunge :: BefungeState 
 evalBefunge = do
@@ -198,7 +241,6 @@ evalBefunge = do
       cPos   = currentPos prog
       
       cInstr = (cFungeSpace >>= \x -> return $ x R.! cPos)
-  liftIO$ print cInstr
   case cInstr of
     -- Flow Control
     Just GoSouth      -> goSouth >> move >> evalBefunge
@@ -210,25 +252,27 @@ evalBefunge = do
     Just Stop         -> return ()
 
     -- Decision Making
-    Just Not          -> (push $ notB pop) >> move >> evalBefunge
-    Just GreaterThan  -> (push $ pop `greaterThan` pop) >> move >> evalBefunge
-    Just IfEastWest   -> ifEastWest pop >> move >> evalBefunge
-    Just IfNorthSouth -> ifNorthSouth pop >> move >> evalBefunge
+    Just Not          -> notB >> move >> evalBefunge
+    Just GreaterThan  -> greaterThan >> move >> evalBefunge
+    Just IfEastWest   -> ifEastWest >> move >> evalBefunge
+    Just IfNorthSouth -> ifNorthSouth >> move >> evalBefunge
     
     -- Number Crunching
-    Just Add          -> (push $ pop `addB` pop) >> move >> evalBefunge
-    Just Mult         -> (push $ pop `multB` pop) >> move >> evalBefunge
-    Just Min          -> (push $ pop `minB` pop) >> move >> evalBefunge
-    Just Remainder    -> (push $ pop `remainderB` pop) >> move >> evalBefunge
-    Just Div          -> (push $ pop `divB` pop) >> move >> evalBefunge
+    Just Add          -> addB >> move >> evalBefunge
+    Just Mult         -> multB >> move >> evalBefunge
+    Just Min          -> minB >> move >> evalBefunge
+    Just Remainder    -> remainderB >> move >> evalBefunge
+    Just Div          -> divB >> move >> evalBefunge
 
     -- Working with Strings 
     Just TStringMode -> move >> evalBefunge
- --   Just OutChar     -> (liftIO $ print pop) >> move >> evalBefunge
+    Just OutChar     -> outChar >> move >> evalBefunge
 
     -- Stack Manipulations
     
+
     Just Empty       -> move >> evalBefunge
+    Just x           -> push x >> move >> evalBefunge
     _       -> undefined
 
 main :: IO ()
