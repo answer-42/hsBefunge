@@ -1,12 +1,18 @@
 {-# LANGUAGE TypeOperators #-}
 module Main where
 
+-- TODO
+-- Add input commands
+-- Make it fully Befunge 93 compliant
+-- Refactor
+-- Add error checking
+
 import System.Environment (getArgs)
 
 import Control.Monad (mapM,liftM,liftM2)
 import Control.Monad.State
 
-import Data.Char (isAscii,isDigit,digitToInt,intToDigit,chr)
+import Data.Char (isAscii,isDigit,digitToInt,intToDigit,chr,ord)
 
 import qualified Data.Array.Repa as R
 import Data.Array.Repa.Index
@@ -38,6 +44,7 @@ data Instructions n s =
       | GreaterThan      -- `
       | Get              -- g
       | Put              -- p
+      | OutNum           -- .
       | IfNorthSouth     -- |
       | InputChar        -- ~
       | Stop             -- @
@@ -67,6 +74,7 @@ instructions =
   ,('`',GreaterThan)
   ,('g',Get)
   ,('p',Put)
+  ,('.',OutNum)
   ,('|',IfNorthSouth)
   ,('~',InputChar)
   ,('@',Stop)
@@ -232,6 +240,14 @@ outChar = do p <- get
                Character a -> liftIO $ putChar a
              put p{stack=init s}
 
+outNum :: BefungeState
+outNum = do p <- get
+            let s = stack p
+            case last s of
+              Num a       -> liftIO $ putChar $ intToDigit a
+            liftIO $ putChar ' '
+            put p{stack=init s}
+
 evalBefunge :: BefungeState 
 evalBefunge = do
   prog <- get
@@ -267,6 +283,7 @@ evalBefunge = do
     -- Working with Strings 
     Just TStringMode -> move >> evalBefunge
     Just OutChar     -> outChar >> move >> evalBefunge
+    Just OutNum      -> outNum >> move >> evalBefunge
 
     -- Stack Manipulations
     
