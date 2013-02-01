@@ -2,16 +2,13 @@
 module Main where
 
 -- TODO
--- Add input commands
--- Make it fully Befunge 93 compliant
--- Refactor
 -- Add error checking
 
 import System.Environment (getArgs)
 import System.Exit (exitSuccess,exitFailure)
 import System.IO
 
-import Control.Monad (unless)
+import Control.Monad (unless,liftM)
 import Control.Monad.State
 
 import Data.Char (isAscii,isDigit,digitToInt,intToDigit,chr,ord)
@@ -85,7 +82,7 @@ instructions =
 data Direction = North | East | South | West deriving (Eq)
 
 data ProgramState = Program {
-   stack       :: [Maybe (Instructions Int Char)] -- Array V R.DIM1 (Instructions Int Char)
+   stack       :: Maybe [Instructions Int Char] -- Array V R.DIM1 (Instructions Int Char)
   ,direction   :: Direction  
   ,fungeSpace  :: Array V R.DIM2 Char
   ,currentPos  :: DIM2
@@ -110,7 +107,7 @@ parse x = fromListVector (Z :. snd befungeDim :. fst befungeDim)
 
 initialize ::  String -> ProgramState
 initialize f = Program {
-   stack      = [] -- fromListVector (Z :. stackSize) $ replicate stackSize Empty
+   stack      = Just [] -- fromListVector (Z :. stackSize) $ replicate stackSize Empty
   ,direction  = East
   ,fungeSpace = parse f
   ,currentPos = Z :. 0 :. 0
@@ -132,18 +129,25 @@ getIns' True x | isAscii x = Just $ Character x
                | otherwise = lookup x instructions
 
 
+(+|) :: Instructions Int Char -> Maybe [Instructions Int Char] -> Maybe [Instructions Int Char]
+(+|) x s = liftM (x:) s
+
+(|+|) s1 s2 = liftM2 (:) s1 s2
+
 -- Stack
 push :: Maybe (Instructions Int Char) ->  BefungeState
 push x = do p <- get
             let s = stack p
-            put p{stack=x:s}
+            put p{stack=x|+|s}
 
 pop :: StateT ProgramState IO (Maybe (Instructions Int Char))
 pop = do p <- get
          let s = stack p
-             v = head s
-         put p{stack=tail s}
+             v = liftM head s
+         put p{stack=liftM tail s}
          return v
+
+argumentError = error "Argument Error"
 
 -- Evaluator
 
@@ -176,71 +180,78 @@ notB = do p <- get
           a <- pop
           let s = stack p
           case a of
-           Just (Num 0) -> put p{stack=(Just . Num) 1:s}
-           Nothing    -> put p{stack=Nothing:s}
-           _          -> put p{stack=(Just . Num) 0:s}
+           Just (Num 0) -> put p{stack=(Num 1)+|s}
+           Nothing    -> argumentError
+           _          -> put p{stack=(Num 0)+|s}
 
 greaterThan :: BefungeState 
 greaterThan = do p <- get
-                 Just (Num a) <- pop
-                 Just (Num b) <- pop
+                 a <- pop
+                 b <- pop
                  let s = stack p
-                 case compare a b of
-                   GT -> put p{stack=(Just . Num) 1:s}
-                   _  -> put p{stack=(Just . Num) 0:s}
+                 case (a,b) of
+                   (Just (Num a), Just (Num b)) -> case compare a b of
+                                                     GT -> put p{stack=(Num 1)+|s}
+                                                     _  -> put p{stack=(Num 0)+|s}
+                   _                            -> argumentError 
 
 ifEastWest :: BefungeState 
 ifEastWest = do p <- get
-                Just (Num a) <- pop
+                a <- pop
                 case a of
-                  0 -> goEast
-                  _ -> goWest
+                  Just (Num 0) -> goEast
+                  Nothing      -> argumentError
+                  _            -> goWest
 
 ifNorthSouth :: BefungeState 
 ifNorthSouth = do p <- get
-                  Just (Num a) <- pop
+                  a <- pop
                   case a of
-                    0 -> goSouth
-                    _ -> goNorth
+                    Just (Num 0) -> goSouth
+                    Nothing      -> argumentError
+                    _            -> goNorth
 
 addB :: BefungeState
 addB = do p <- get
-          Just (Num a) <- pop
-          Just (Num b) <- pop
+          a <- pop
+          b <- pop
           let s = stack p
-          put p{stack=(Just . Num) (a+b):s} 
+          put p{stack=(liftM2 addN a b)|+| s}
+  where addN (Num a) (Num b) = Num $ a+b
 
 multB :: BefungeState
 multB = do p <- get
-           Just (Num a) <- pop
-           Just (Num b) <- pop
+           a <- pop
+           b <- pop
            let s = stack p
-           put p{stack=(Just . Num) (a*b):s}
+           put p{stack=(liftM2 multN a b)|+|s}
+  where multN (Num a) (Num b) = Num $ a*b
 
 minB :: BefungeState
 minB = do p <- get
-          Just (Num a) <- pop
-          Just (Num b) <- pop
+          a <- pop
+          b <- pop
           let s = stack p
-          put p{stack=(Just . Num) (a-b):s}
+          put p{stack=(liftM2 minN a b)|+|s}
+  where minN (Num a) (Num b) = Num $ a-b
 
 remainderB :: BefungeState
 remainderB = do p <- get
-                Just (Num a) <- pop
-                Just (Num b) <- pop
+                a <- pop
+                b <- pop
                 let s = stack p
-                case a of
-                  0 -> put p{stack=(Just . Num) 0:s}
-                  _ -> put p{stack=(Just .Num) (b`rem`a):s}
+                put p{stack=(liftM2 remN a b)|+|s}
+  where remN (Num 0) (Num _) = Num 0 
+        remN (Num a) (Num b) = Num $ b `rem` a
 
 divB :: BefungeState
 divB = do p <- get
-          Just (Num a) <- pop
-          Just (Num b) <- pop
+          a <- pop
+          b <- pop
           let s = stack p
-          case a of
-            0 -> put p{stack=(Just . Num) 0:s}
-            _ -> put p{stack=(Just . Num) (b`quot`a):s}
+          put p{stack=(liftM2 divN a b)|+|s}
+  where divN (Num 0) (Num _) = Num 0 
+        divN (Num a) (Num b) = Num $ b `quot` a
 
 toggleString :: BefungeState
 toggleString = do p <- get
@@ -248,16 +259,19 @@ toggleString = do p <- get
 
 outChar :: BefungeState
 outChar = do p <- get
-             Just b <- pop
+             b <- pop
              case b of
-               Num a       -> liftIO $ putChar $ chr a
-               Character a -> liftIO $ putChar a
+               Just (Num a)       -> liftIO $ putChar $ chr a
+               Just (Character a) -> liftIO $ putChar a
+               Nothing            -> argumentError
 
 outNum :: BefungeState
 outNum = do p <- get
-            Just b <- pop
+            b <- pop
             case b of
-              Num a       -> liftIO $ putChar $ intToDigit a
+              Just (Num a)       -> liftIO $ putChar $ intToDigit a
+              Nothing            -> argumentError
+              _                  -> argumentError
             liftIO $ putChar ' '
 
 clear :: IO ()
@@ -272,6 +286,7 @@ inInt = liftIO getChar >>=  (push . Just . Num . digitToInt) >> liftIO clear
 
 dup :: BefungeState
 dup = do x <- pop
+
          push x
          push x
 
@@ -282,23 +297,27 @@ swap = do x <- pop
           push x
 
 getB :: BefungeState
-getB = do Just (Num y) <- pop
-          Just (Num x) <- pop
+getB = do y <- pop
+          x <- pop
 
           p <- get
           let fS = fungeSpace p
-
-          push $ getIns' False $ fS R.! (Z :. y :. x) 
+          case (x,y) of
+            (Just (Num j), Just (Num i)) -> push $ getIns' False $ fS R.! (Z :. i :. j)
+            _                            -> push Nothing
 
 putB :: BefungeState
-putB = do Just (Num y) <- pop
-          Just (Num x) <- pop
+putB = do y <- pop
+          x <- pop
           v <- pop
 
           p <- get
           let fS = fungeSpace p
+          
+          case (x,y) of
+            (Just (Num j), Just (Num i)) -> put p{fungeSpace=update fS (Z :. i :. j) v}
+            _                            -> argumentError
 
-          put p{fungeSpace=update fS (Z :. y :. x) v}
   where update :: Array V R.DIM2 Char -> R.DIM2 -> Maybe (Instructions Int Char) -> Array V R.DIM2 Char
         update fS a@(Z:.y:.x) i = R.computeS $ R.traverse fS id (\f b  -> if a == b 
                                                                           then getV i
@@ -306,7 +325,7 @@ putB = do Just (Num y) <- pop
         getV x = case x of
                    Just (Num a)       -> intToDigit a
                    Just (Character a) -> a
-
+                   _                  -> argumentError
 
 evalBefunge :: BefungeState 
 evalBefunge = do
