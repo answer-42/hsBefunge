@@ -8,8 +8,10 @@ module Main where
 -- Add error checking
 
 import System.Environment (getArgs)
+import System.Exit (exitSuccess,exitFailure)
+import System.IO
 
-import Control.Monad (mapM,liftM,liftM2)
+import Control.Monad
 import Control.Monad.State
 
 import Data.Char (isAscii,isDigit,digitToInt,intToDigit,chr,ord)
@@ -238,17 +240,16 @@ divB = do p <- get
             0 -> put p{stack=Num 0:s}
             _ -> put p{stack=Num (b`quot`a):s}
 
+toggleString :: BefungeState
+toggleString = do p <- get
+                  put p{stringFlag= not $ stringFlag p}
+
 outChar :: BefungeState
 outChar = do p <- get
              b <- pop
              case b of
                Num a       -> liftIO $ putChar $ chr a
                Character a -> liftIO $ putChar a
-
-toggleString :: BefungeState
-toggleString = do p <- get
-                  put p{stringFlag= not $ stringFlag p}
-
 
 outNum :: BefungeState
 outNum = do p <- get
@@ -257,14 +258,21 @@ outNum = do p <- get
               Num a       -> liftIO $ putChar $ intToDigit a
             liftIO $ putChar ' '
 
+clear :: IO ()
+clear = do x <- getChar
+           if x == '\n'
+           then return ()
+           else clear
+
+inChar :: BefungeState
+inChar = liftIO getChar >>= (push . Character) >> liftIO clear
+            
+inInt :: BefungeState
+inInt = liftIO getChar >>=  (push . Num . digitToInt) >> liftIO clear
+
 evalBefunge :: BefungeState 
 evalBefunge = do
   prog <- get
-  let cStack = stack prog
-      cDir   = direction prog
-      cFungeSpace = fungeSpace prog
-      cPos   = currentPos prog
-      
   cInstr <- getInst 
   case cInstr of
     -- Flow Control
@@ -274,7 +282,7 @@ evalBefunge = do
     Just GoWest       -> goWest >> move >> evalBefunge
     Just Trampoline   -> move >> move >> evalBefunge
 
-    Just Stop         -> return ()
+    Just Stop         -> liftIO exitSuccess
 
     -- Decision Making
     Just Not          -> notB >> move >> evalBefunge
@@ -291,15 +299,19 @@ evalBefunge = do
 
     -- Working with Strings 
     Just TStringMode -> toggleString >> move >> evalBefunge
+    
+    -- IO
     Just OutChar     -> outChar >> move >> evalBefunge
     Just OutNum      -> outNum >> move >> evalBefunge
+    Just InputInt    -> inInt >> move >> evalBefunge
+    Just InputChar   -> inChar >> move >> evalBefunge
 
     -- Stack Manipulations
     
 
     Just Empty       -> move >> evalBefunge
     Just x           -> push x >> move >> evalBefunge
-    _       -> undefined
+    Nothing          -> liftIO exitFailure
 
 main :: IO ()
 main = do
