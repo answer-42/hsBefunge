@@ -11,7 +11,7 @@ import System.Environment (getArgs)
 import System.Exit (exitSuccess,exitFailure)
 import System.IO
 
-import Control.Monad
+import Control.Monad (unless)
 import Control.Monad.State
 
 import Data.Char (isAscii,isDigit,digitToInt,intToDigit,chr,ord)
@@ -260,9 +260,7 @@ outNum = do p <- get
 
 clear :: IO ()
 clear = do x <- getChar
-           if x == '\n'
-           then return ()
-           else clear
+           unless (x == '\n') clear
 
 inChar :: BefungeState
 inChar = liftIO getChar >>= (push . Character) >> liftIO clear
@@ -270,48 +268,63 @@ inChar = liftIO getChar >>= (push . Character) >> liftIO clear
 inInt :: BefungeState
 inInt = liftIO getChar >>=  (push . Num . digitToInt) >> liftIO clear
 
+dup :: BefungeState
+dup = do x <- pop
+         push x
+         push x
+
+swap :: BefungeState
+swap = do x <- pop
+          y <- pop
+          push y
+          push x
+
 evalBefunge :: BefungeState 
 evalBefunge = do
   prog <- get
   cInstr <- getInst 
   case cInstr of
     -- Flow Control
-    Just GoSouth      -> goSouth >> move >> evalBefunge
-    Just GoNorth      -> goNorth >> move >> evalBefunge
-    Just GoEast       -> goEast  >> move >> evalBefunge
-    Just GoWest       -> goWest >> move >> evalBefunge
-    Just Trampoline   -> move >> move >> evalBefunge
+    Just GoSouth      -> goSouth
+    Just GoNorth      -> goNorth
+    Just GoEast       -> goEast
+    Just GoWest       -> goWest
+    Just Trampoline   -> move
 
     Just Stop         -> liftIO exitSuccess
 
     -- Decision Making
-    Just Not          -> notB >> move >> evalBefunge
-    Just GreaterThan  -> greaterThan >> move >> evalBefunge
-    Just IfEastWest   -> ifEastWest >> move >> evalBefunge
-    Just IfNorthSouth -> ifNorthSouth >> move >> evalBefunge
+    Just Not          -> notB
+    Just GreaterThan  -> greaterThan
+    Just IfEastWest   -> ifEastWest
+    Just IfNorthSouth -> ifNorthSouth
     
     -- Number Crunching
-    Just Add          -> addB >> move >> evalBefunge
-    Just Mult         -> multB >> move >> evalBefunge
-    Just Min          -> minB >> move >> evalBefunge
-    Just Remainder    -> remainderB >> move >> evalBefunge
-    Just Div          -> divB >> move >> evalBefunge
+    Just Add          -> addB
+    Just Mult         -> multB
+    Just Min          -> minB
+    Just Remainder    -> remainderB
+    Just Div          -> divB
 
     -- Working with Strings 
-    Just TStringMode -> toggleString >> move >> evalBefunge
+    Just TStringMode -> toggleString
     
     -- IO
-    Just OutChar     -> outChar >> move >> evalBefunge
-    Just OutNum      -> outNum >> move >> evalBefunge
-    Just InputInt    -> inInt >> move >> evalBefunge
-    Just InputChar   -> inChar >> move >> evalBefunge
+    Just OutChar     -> outChar
+    Just OutNum      -> outNum
+    Just InputInt    -> inInt
+    Just InputChar   -> inChar
 
     -- Stack Manipulations
-    
+    Just Pop         -> void pop 
+    Just Dup         -> dup    
+    Just Swap        -> swap
 
-    Just Empty       -> move >> evalBefunge
-    Just x           -> push x >> move >> evalBefunge
+    Just Empty       -> get >>= put 
+    Just x           -> push x
     Nothing          -> liftIO exitFailure
+  move
+  evalBefunge
 
 main :: IO ()
 main = do
