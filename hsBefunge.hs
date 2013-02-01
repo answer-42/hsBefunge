@@ -85,9 +85,9 @@ data Direction = North | East | South | West deriving (Eq)
 data ProgramState = Program {
    stack       :: [Instructions Int Char] -- Array V R.DIM1 (Instructions Int Char)
   ,direction   :: Direction  
-  ,fungeSpace  :: Maybe (Array V R.DIM2 (Instructions Int Char))
+  ,fungeSpace  :: Array V R.DIM2 Char
   ,currentPos  :: DIM2
---   ,stringFlag  :: Bool
+  ,stringFlag  :: Bool
 }
 
 type BefungeState = StateT ProgramState IO () 
@@ -95,9 +95,9 @@ type BefungeState = StateT ProgramState IO ()
 stackSize  = 1024 :: Int
 befungeDim = (80,25) :: (Int,Int)
 
-parse ::  String -> Maybe (Array V R.DIM2 (Instructions Int Char))
-parse x = liftM (fromListVector (Z :. snd befungeDim :. fst befungeDim)) 
-                           $ getIns False $ addEmptyRows $ foldr ((++) . fillUp) [] $ lines x
+parse ::  String -> Array V R.DIM2 Char
+parse x = fromListVector (Z :. snd befungeDim :. fst befungeDim)
+                           $ addEmptyRows $ foldr ((++) . fillUp) [] $ lines x
   where fillUp l = if length l < fst befungeDim
                    then l ++ replicate (fst befungeDim-length l) ' '
                    else l
@@ -106,22 +106,28 @@ parse x = liftM (fromListVector (Z :. snd befungeDim :. fst befungeDim))
                          then x++replicate (uncurry (*) befungeDim-length x) ' '
                          else x
 
-        getIns :: Bool -> String -> Maybe [Instructions Int Char ]
-        getIns True (x:xs) | x == '"'  = liftM2 (:) (lookup x instructions) $ getIns False xs
-                           | isAscii x = liftM2 (:) (Just $ Character x) $ getIns True xs
-                           | otherwise = Nothing
-        getIns False (x:xs) | x == '"'  = liftM2 (:) (lookup x instructions) $ getIns True xs
-                            | isDigit x = liftM2 (:) (Just $ Num $ digitToInt x) $ getIns False xs
-                            | otherwise = liftM2 (:) (lookup x instructions) $ getIns False xs
-        getIns _ [] = Just []
-
 initialize ::  String -> ProgramState
 initialize f = Program {
    stack      = [] -- fromListVector (Z :. stackSize) $ replicate stackSize Empty
   ,direction  = East
   ,fungeSpace = parse f
   ,currentPos = Z :. 0 :. 0
+  ,stringFlag = False
   }
+
+getInst :: StateT ProgramState IO (Maybe (Instructions Int Char))
+getInst = do p <- get
+             let fS = fungeSpace p
+                 cP = currentPos p
+                 f  = stringFlag p
+             return $ getIns' f (fS R.! cP)
+  where getIns' :: Bool -> Char -> Maybe (Instructions Int Char)
+        getIns' _ '"' = Just TStringMode
+        getIns' False x | isDigit x = Just $ Num $ digitToInt x                
+                        | otherwise = lookup x instructions
+        getIns' True x | isAscii x = Just $ Character x
+                       | otherwise = lookup x instructions
+
 
 -- Stack
 push :: Instructions Int Char ->  BefungeState
@@ -239,6 +245,11 @@ outChar = do p <- get
                Num a       -> liftIO $ putChar $ chr a
                Character a -> liftIO $ putChar a
 
+toggleString :: BefungeState
+toggleString = do p <- get
+                  put p{stringFlag= not $ stringFlag p}
+
+
 outNum :: BefungeState
 outNum = do p <- get
             b <- pop
@@ -254,7 +265,7 @@ evalBefunge = do
       cFungeSpace = fungeSpace prog
       cPos   = currentPos prog
       
-      cInstr = (cFungeSpace >>= \x -> return $ x R.! cPos)
+  cInstr <- getInst 
   case cInstr of
     -- Flow Control
     Just GoSouth      -> goSouth >> move >> evalBefunge
@@ -279,7 +290,7 @@ evalBefunge = do
     Just Div          -> divB >> move >> evalBefunge
 
     -- Working with Strings 
-    Just TStringMode -> move >> evalBefunge
+    Just TStringMode -> toggleString >> move >> evalBefunge
     Just OutChar     -> outChar >> move >> evalBefunge
     Just OutNum      -> outNum >> move >> evalBefunge
 
