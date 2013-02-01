@@ -8,7 +8,7 @@ import System.Environment (getArgs)
 import System.Exit (exitSuccess,exitFailure)
 import System.IO
 
-import Control.Monad (unless,liftM)
+import Control.Monad (unless)
 import Control.Monad.State
 
 import Data.Char (isAscii,isDigit,digitToInt,intToDigit,chr,ord)
@@ -368,8 +368,8 @@ evalBefunge = do
     Just Swap        -> swap
 
     -- Funge-Space Storage
- --   Just Get         -> getB
- --   Just Put         -> putB
+    Just Get         -> getB
+    Just Put         -> putB
 
     Just Empty       -> get >>= put 
     Just x           -> push $ Just x
