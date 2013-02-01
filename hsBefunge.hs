@@ -85,7 +85,7 @@ instructions =
 data Direction = North | East | South | West deriving (Eq)
 
 data ProgramState = Program {
-   stack       :: [Instructions Int Char] -- Array V R.DIM1 (Instructions Int Char)
+   stack       :: [Maybe (Instructions Int Char)] -- Array V R.DIM1 (Instructions Int Char)
   ,direction   :: Direction  
   ,fungeSpace  :: Array V R.DIM2 Char
   ,currentPos  :: DIM2
@@ -123,21 +123,22 @@ getInst = do p <- get
                  cP = currentPos p
                  f  = stringFlag p
              return $ getIns' f (fS R.! cP)
-  where getIns' :: Bool -> Char -> Maybe (Instructions Int Char)
-        getIns' _ '"' = Just TStringMode
-        getIns' False x | isDigit x = Just $ Num $ digitToInt x                
-                        | otherwise = lookup x instructions
-        getIns' True x | isAscii x = Just $ Character x
-                       | otherwise = lookup x instructions
+
+getIns' :: Bool -> Char -> Maybe (Instructions Int Char)
+getIns' _ '"' = Just TStringMode
+getIns' False x | isDigit x = Just $ Num $ digitToInt x                
+                | otherwise = lookup x instructions
+getIns' True x | isAscii x = Just $ Character x
+               | otherwise = lookup x instructions
 
 
 -- Stack
-push :: Instructions Int Char ->  BefungeState
+push :: Maybe (Instructions Int Char) ->  BefungeState
 push x = do p <- get
             let s = stack p
             put p{stack=x:s}
 
-pop :: StateT ProgramState IO (Instructions Int Char)
+pop :: StateT ProgramState IO (Maybe (Instructions Int Char))
 pop = do p <- get
          let s = stack p
              v = head s
@@ -175,70 +176,71 @@ notB = do p <- get
           a <- pop
           let s = stack p
           case a of
-            Num 0 -> put p{stack=Num 1:s}
-            _     -> put p{stack=Num 0:s}
+           Just (Num 0) -> put p{stack=(Just . Num) 1:s}
+           Nothing    -> put p{stack=Nothing:s}
+           _          -> put p{stack=(Just . Num) 0:s}
 
 greaterThan :: BefungeState 
 greaterThan = do p <- get
-                 (Num a) <- pop
-                 (Num b) <- pop
+                 Just (Num a) <- pop
+                 Just (Num b) <- pop
                  let s = stack p
                  case compare a b of
-                   GT -> put p{stack=Num 1:s}
-                   _  -> put p{stack=Num 0:s}
+                   GT -> put p{stack=(Just . Num) 1:s}
+                   _  -> put p{stack=(Just . Num) 0:s}
 
 ifEastWest :: BefungeState 
 ifEastWest = do p <- get
-                (Num a) <- pop
+                Just (Num a) <- pop
                 case a of
                   0 -> goEast
                   _ -> goWest
 
 ifNorthSouth :: BefungeState 
 ifNorthSouth = do p <- get
-                  (Num a) <- pop
+                  Just (Num a) <- pop
                   case a of
                     0 -> goSouth
                     _ -> goNorth
 
 addB :: BefungeState
 addB = do p <- get
-          (Num a) <- pop
-          (Num b) <- pop
+          Just (Num a) <- pop
+          Just (Num b) <- pop
           let s = stack p
-          put p{stack=Num (a+b):s} 
+          put p{stack=(Just . Num) (a+b):s} 
 
 multB :: BefungeState
 multB = do p <- get
-           (Num a) <- pop
-           (Num b) <- pop
+           Just (Num a) <- pop
+           Just (Num b) <- pop
            let s = stack p
-           put p{stack=Num (a*b):s}
+           put p{stack=(Just . Num) (a*b):s}
 
 minB :: BefungeState
 minB = do p <- get
-          (Num a) <- pop
-          (Num b) <- pop
+          Just (Num a) <- pop
+          Just (Num b) <- pop
           let s = stack p
-          put p{stack=Num (a-b):s}
+          put p{stack=(Just . Num) (a-b):s}
 
 remainderB :: BefungeState
 remainderB = do p <- get
-                (Num a) <- pop
-                (Num b) <- pop
+                Just (Num a) <- pop
+                Just (Num b) <- pop
                 let s = stack p
                 case a of
-                  0 -> put p{stack=Num 0:s}
-                  _ -> put p{stack=Num (b`rem`a):s}
+                  0 -> put p{stack=(Just . Num) 0:s}
+                  _ -> put p{stack=(Just .Num) (b`rem`a):s}
 
 divB :: BefungeState
 divB = do p <- get
-          (Num a) <- pop
-          (Num b) <- pop
+          Just (Num a) <- pop
+          Just (Num b) <- pop
           let s = stack p
           case a of
-            0 -> put p{stack=Num 0:s}
-            _ -> put p{stack=Num (b`quot`a):s}
+            0 -> put p{stack=(Just . Num) 0:s}
+            _ -> put p{stack=(Just . Num) (b`quot`a):s}
 
 toggleString :: BefungeState
 toggleString = do p <- get
@@ -246,14 +248,14 @@ toggleString = do p <- get
 
 outChar :: BefungeState
 outChar = do p <- get
-             b <- pop
+             Just b <- pop
              case b of
                Num a       -> liftIO $ putChar $ chr a
                Character a -> liftIO $ putChar a
 
 outNum :: BefungeState
 outNum = do p <- get
-            b <- pop
+            Just b <- pop
             case b of
               Num a       -> liftIO $ putChar $ intToDigit a
             liftIO $ putChar ' '
@@ -263,10 +265,10 @@ clear = do x <- getChar
            unless (x == '\n') clear
 
 inChar :: BefungeState
-inChar = liftIO getChar >>= (push . Character) >> liftIO clear
+inChar = liftIO getChar >>= (push . Just . Character) >> liftIO clear
             
 inInt :: BefungeState
-inInt = liftIO getChar >>=  (push . Num . digitToInt) >> liftIO clear
+inInt = liftIO getChar >>=  (push . Just . Num . digitToInt) >> liftIO clear
 
 dup :: BefungeState
 dup = do x <- pop
@@ -279,33 +281,31 @@ swap = do x <- pop
           push y
           push x
 
-{-
 getB :: BefungeState
-getB = do y <- pop
-          x <- pop
+getB = do Just (Num y) <- pop
+          Just (Num x) <- pop
 
           p <- get
           let fS = fungeSpace p
 
-          push $ getInst $ fS R.! (Z :. y :. x) 
+          push $ getIns' False $ fS R.! (Z :. y :. x) 
 
 putB :: BefungeState
-putB = do y <- pop
-          x <- pop
+putB = do Just (Num y) <- pop
+          Just (Num x) <- pop
           v <- pop
 
           p <- get
           let fS = fungeSpace p
 
           put p{fungeSpace=update fS (Z :. y :. x) v}
-  where update :: Array V R.DIM2 Char -> R.DIM2 -> Instructions Int Char -> Array V R.DIM2 Char
-        update fS a@(Z:.y:.x) i = R.traverse id (\f b@(Z:.j:.i)  -> if a == b 
-                                                                    then getV i
-                                                                    else f b) fS
+  where update :: Array V R.DIM2 Char -> R.DIM2 -> Maybe (Instructions Int Char) -> Array V R.DIM2 Char
+        update fS a@(Z:.y:.x) i = R.computeS $ R.traverse fS id (\f b  -> if a == b 
+                                                                          then getV i
+                                                                          else f b)
         getV x = case x of
-                   Num a       -> a
-                   Character a -> a
--}
+                   Just (Num a)       -> intToDigit a
+                   Just (Character a) -> a
 
 
 evalBefunge :: BefungeState 
@@ -349,11 +349,11 @@ evalBefunge = do
     Just Swap        -> swap
 
     -- Funge-Space Storage
-    Just Get         -> getB
-    Just Put         -> putB
+ --   Just Get         -> getB
+ --   Just Put         -> putB
 
     Just Empty       -> get >>= put 
-    Just x           -> push x
+    Just x           -> push $ Just x
     Nothing          -> liftIO exitFailure
   move
   evalBefunge
