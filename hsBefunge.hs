@@ -87,6 +87,7 @@ data ProgramState = Program {
   ,direction   :: Direction  
   ,fungeSpace  :: Maybe (Array V R.DIM2 (Instructions Int Char))
   ,currentPos  :: DIM2
+--   ,stringFlag  :: Bool
 }
 
 type BefungeState = StateT ProgramState IO () 
@@ -126,13 +127,14 @@ initialize f = Program {
 push :: Instructions Int Char ->  BefungeState
 push x = do p <- get
             let s = stack p
-            put p{stack=(s++[x])}
+            put p{stack=x:s}
 
-
-pop :: BefungeState
+pop :: StateT ProgramState IO (Instructions Int Char)
 pop = do p <- get
          let s = stack p
-         put p{stack=init s}
+             v = head s
+         put p{stack=tail s}
+         return v
 
 -- Evaluator
 
@@ -162,91 +164,87 @@ move = let (x,y) = befungeDim
 
 notB :: BefungeState 
 notB = do p <- get
+          a <- pop
           let s = stack p
-              a = last s
           case a of
-            Num 0 -> put p{stack=tail s++[Num 1]}
-            _     -> put p{stack=tail s++[Num 0]}
+            Num 0 -> put p{stack=Num 1:s}
+            _     -> put p{stack=Num 0:s}
 
 greaterThan :: BefungeState 
 greaterThan = do p <- get
+                 (Num a) <- pop
+                 (Num b) <- pop
                  let s = stack p
-                     (Num a) = last s
-                     (Num b) = last $ init s
                  case compare a b of
-                   GT -> put p{stack=(init $ init s)++[Num 1]}
-                   _  -> put p{stack=(init $ init s)++[Num 0]}
+                   GT -> put p{stack=Num 1:s}
+                   _  -> put p{stack=Num 0:s}
 
 ifEastWest :: BefungeState 
 ifEastWest = do p <- get
-                let s = stack p
-                    (Num a) = last s
+                (Num a) <- pop
                 case a of
                   0 -> goEast
                   _ -> goWest
 
 ifNorthSouth :: BefungeState 
 ifNorthSouth = do p <- get
-                  let s = stack p
-                      (Num a) = last s
+                  (Num a) <- pop
                   case a of
                     0 -> goSouth
                     _ -> goNorth
 
 addB :: BefungeState
 addB = do p <- get
+          (Num a) <- pop
+          (Num b) <- pop
           let s = stack p
-              (Num a) = last s
-              (Num b) = last $ init s
-          put p{stack=(init $ init s)++[Num $ a+b]} 
+          put p{stack=Num (a+b):s} 
 
 multB :: BefungeState
 multB = do p <- get
+           (Num a) <- pop
+           (Num b) <- pop
            let s = stack p
-               (Num a) = last s
-               (Num b) = last $ init s
-           put p{stack=(init $ init s)++[Num $ a*b]} 
+           put p{stack=Num (a*b):s}
 
 minB :: BefungeState
 minB = do p <- get
+          (Num a) <- pop
+          (Num b) <- pop
           let s = stack p
-              (Num a) = last s
-              (Num b) = last $ init s
-          put p{stack=(init $ init s)++[Num $ a-b]} 
+          put p{stack=Num (a-b):s}
 
 remainderB :: BefungeState
 remainderB = do p <- get
+                (Num a) <- pop
+                (Num b) <- pop
                 let s = stack p
-                    (Num a) = last s
-                    (Num b) = last $ init s
                 case a of
-                  0 -> put p{stack=(init $ init s)++[Num 0]} 
-                  _ -> put p{stack=(init $ init s)++[Num $ b `rem` a]} 
+                  0 -> put p{stack=Num 0:s}
+                  _ -> put p{stack=Num (b`rem`a):s}
 
 divB :: BefungeState
 divB = do p <- get
+          (Num a) <- pop
+          (Num b) <- pop
           let s = stack p
-              (Num a) = last s
-              (Num b) = last $ init s
           case a of
-            0 -> put p{stack=(init $ init s)++[Num 0]} 
-            _ -> put p{stack=(init $ init s)++[Num $ b `quot` a]} 
+            0 -> put p{stack=Num 0:s}
+            _ -> put p{stack=Num (b`quot`a):s}
 
 outChar :: BefungeState
 outChar = do p <- get
-             let s = stack p
-             case last s of
+             b <- pop
+             case b of
                Num a       -> liftIO $ putChar $ chr a
                Character a -> liftIO $ putChar a
-             put p{stack=init s}
 
 outNum :: BefungeState
 outNum = do p <- get
-            let s = stack p
-            case last s of
+            b <- pop
+            case b of
               Num a       -> liftIO $ putChar $ intToDigit a
             liftIO $ putChar ' '
-            put p{stack=init s}
 
 evalBefunge :: BefungeState 
 evalBefunge = do
