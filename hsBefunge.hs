@@ -279,9 +279,37 @@ swap = do x <- pop
           push y
           push x
 
+{-
+getB :: BefungeState
+getB = do y <- pop
+          x <- pop
+
+          p <- get
+          let fS = fungeSpace p
+
+          push $ getInst $ fS R.! (Z :. y :. x) 
+
+putB :: BefungeState
+putB = do y <- pop
+          x <- pop
+          v <- pop
+
+          p <- get
+          let fS = fungeSpace p
+
+          put p{fungeSpace=update fS (Z :. y :. x) v}
+  where update :: Array V R.DIM2 Char -> R.DIM2 -> Instructions Int Char -> Array V R.DIM2 Char
+        update fS a@(Z:.y:.x) i = R.traverse id (\f b@(Z:.j:.i)  -> if a == b 
+                                                                    then getV i
+                                                                    else f b) fS
+        getV x = case x of
+                   Num a       -> a
+                   Character a -> a
+-}
+
+
 evalBefunge :: BefungeState 
 evalBefunge = do
-  prog <- get
   cInstr <- getInst 
   case cInstr of
     -- Flow Control
@@ -319,6 +347,10 @@ evalBefunge = do
     Just Pop         -> void pop 
     Just Dup         -> dup    
     Just Swap        -> swap
+
+    -- Funge-Space Storage
+    Just Get         -> getB
+    Just Put         -> putB
 
     Just Empty       -> get >>= put 
     Just x           -> push x
