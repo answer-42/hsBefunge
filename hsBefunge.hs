@@ -11,8 +11,11 @@ import System.IO
 import Control.Monad (unless)
 import Control.Monad.State
 
+-- import Control.Arrow ((&&&))
+
 import Data.Char (isAscii,isDigit,digitToInt,intToDigit,chr,ord)
 import qualified Data.Tuple as T
+-- import Data.Function (on)
 
 import qualified Data.Array.Repa as R
 import Data.Array.Repa.Index
@@ -133,9 +136,9 @@ getIns' True x | isAscii x = Just $ Character x
 
 
 (+|) :: Instructions Int Char -> Maybe [Instructions Int Char] -> Maybe [Instructions Int Char]
-(+|) x s = liftM (x:) s
+(+|) x = liftM (x:)
 
-(|+|) s1 s2 = liftM2 (:) s1 s2
+(|+|) = liftM2 (:)
 
 -- Stack
 push :: Maybe (Instructions Int Char) ->  BefungeState
@@ -149,8 +152,6 @@ pop = do p <- get
              v = liftM head s
          put p{stack=liftM tail s}
          return v
-
-argumentError = error "Argument Error"
 
 -- Evaluator
 
@@ -183,9 +184,9 @@ notB = do p <- get
           a <- pop
           let s = stack p
           case a of
-           Just (Num 0) -> put p{stack=(Num 1)+|s}
-           Nothing    -> argumentError
-           _          -> put p{stack=(Num 0)+|s}
+           Just (Num 0) -> put p{stack=Num 1+|s}
+           Nothing    -> put p{stack=Nothing}
+           _          -> put p{stack=Num 0+|s}
 
 greaterThan :: BefungeState 
 greaterThan = do p <- get
@@ -194,16 +195,16 @@ greaterThan = do p <- get
                  let s = stack p
                  case (a,b) of
                    (Just (Num a), Just (Num b)) -> case compare a b of
-                                                     GT -> put p{stack=(Num 1)+|s}
-                                                     _  -> put p{stack=(Num 0)+|s}
-                   _                            -> argumentError 
+                                                     GT -> put p{stack=Num 1+|s}
+                                                     _  -> put p{stack=Num 0+|s}
+                   _                            -> put p{stack=Nothing} 
 
 ifEastWest :: BefungeState 
 ifEastWest = do p <- get
                 a <- pop
                 case a of
                   Just (Num 0) -> goEast
-                  Nothing      -> argumentError
+                  Nothing      -> return ()
                   _            -> goWest
 
 ifNorthSouth :: BefungeState 
@@ -211,7 +212,7 @@ ifNorthSouth = do p <- get
                   a <- pop
                   case a of
                     Just (Num 0) -> goSouth
-                    Nothing      -> argumentError
+                    Nothing      -> return () 
                     _            -> goNorth
 
 addB :: BefungeState
@@ -219,7 +220,7 @@ addB = do p <- get
           a <- pop
           b <- pop
           let s = stack p
-          put p{stack=(liftM2 addN a b)|+| s}
+          put p{stack=liftM2 addN a b |+| s}
   where addN (Num a) (Num b) = Num $ a+b
 
 multB :: BefungeState
@@ -227,7 +228,7 @@ multB = do p <- get
            a <- pop
            b <- pop
            let s = stack p
-           put p{stack=(liftM2 multN a b)|+|s}
+           put p{stack=liftM2 multN a b |+| s}
   where multN (Num a) (Num b) = Num $ a*b
 
 minB :: BefungeState
@@ -235,7 +236,7 @@ minB = do p <- get
           a <- pop
           b <- pop
           let s = stack p
-          put p{stack=(liftM2 minN a b)|+|s}
+          put p{stack=liftM2 minN a b |+| s}
   where minN (Num a) (Num b) = Num $ a-b
 
 remainderB :: BefungeState
@@ -243,7 +244,7 @@ remainderB = do p <- get
                 a <- pop
                 b <- pop
                 let s = stack p
-                put p{stack=(liftM2 remN a b)|+|s}
+                put p{stack=liftM2 remN a b |+| s}
   where remN (Num 0) (Num _) = Num 0 
         remN (Num a) (Num b) = Num $ b `rem` a
 
@@ -252,7 +253,7 @@ divB = do p <- get
           a <- pop
           b <- pop
           let s = stack p
-          put p{stack=(liftM2 divN a b)|+|s}
+          put p{stack=liftM2 divN a b |+| s}
   where divN (Num 0) (Num _) = Num 0 
         divN (Num a) (Num b) = Num $ b `quot` a
 
@@ -266,15 +267,14 @@ outChar = do p <- get
              case b of
                Just (Num a)       -> liftIO $ putChar $ chr a
                Just (Character a) -> liftIO $ putChar a
-               Nothing            -> argumentError
+               Nothing            -> return () 
 
 outNum :: BefungeState
 outNum = do p <- get
             b <- pop
             case b of
               Just (Num a)       -> liftIO $ putChar $ intToDigit a
-              Nothing            -> argumentError
-              _                  -> argumentError
+              _                  -> return () 
             liftIO $ putChar ' '
 
 clear :: IO ()
@@ -289,7 +289,6 @@ inInt = liftIO getChar >>=  (push . Just . Num . digitToInt) >> liftIO clear
 
 dup :: BefungeState
 dup = do x <- pop
-
          push x
          push x
 
@@ -319,7 +318,7 @@ putB = do y <- pop
           
           case (x,y, fS) of
             (Just (Num j), Just (Num i), Just fS) -> put p{fungeSpace=update fS (Z :. i :. j) v}
-            _                                     -> argumentError
+            _                                     -> return () 
 
   where update :: Array V R.DIM2 Char -> R.DIM2 -> Maybe (Instructions Int Char) -> Maybe (Array V R.DIM2 Char)
         update fS a@(Z:.y:.x) i = do v <- getV i 
