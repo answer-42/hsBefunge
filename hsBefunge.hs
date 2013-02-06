@@ -1,8 +1,16 @@
 {-# LANGUAGE TypeOperators #-}
 module Main where
 
--- TODO
--- Add error checking
+-- "THE BEER-WARE LICENSE" (Revision 42):
+-- <sebastian.benque@gmail.com> wrote this file. As long as you retain this notice you
+-- can do whatever you want with this stuff. If we meet some day, and you think
+-- this stuff is worth it, you can buy me a beer in return Sebastian Benuqe
+
+{- Befunge-93
+ - A standard compliant interpreter. 
+ - $ ./hsBefunge <file>
+ - Interprets the <file>
+ -}
 
 import System.Environment (getArgs)
 import System.Exit (exitSuccess,exitFailure)
@@ -83,7 +91,8 @@ instructions =
   ,('@',Stop)
   ,(' ',Empty)]
 
-data Direction = North | East | South | West deriving (Eq)
+data Direction = North | East | South | West 
+  deriving (Eq)
 
 data ProgramState = Program {
    stack       :: Maybe [Instructions Int Char] -- Array V R.DIM1 (Instructions Int Char)
@@ -101,14 +110,10 @@ befungeDim = (80,25) :: (Int,Int)
 parse ::  String -> Maybe (Array V R.DIM2 Char)
 parse x = Just $ fromListVector (Z :. snd befungeDim :. fst befungeDim)
                            $ addEmptyRows $ foldr ((++) . fillUp) [] $ lines x
-  where fillUp l = if length l < fst befungeDim
-                   then l ++ replicate (fst befungeDim-length l) ' '
-                   else l
+  where fillUp l = l ++ replicate (max 0 (fst befungeDim-length l)) ' '
         
-        addEmptyRows x = if length x < uncurry (*) befungeDim
-                         then x++replicate (uncurry (*) befungeDim-length x) ' '
-                         else x
-
+        addEmptyRows x = x ++ replicate (max 0 (uncurry (*) befungeDim-length x)) ' '
+        
 initialize ::  String -> ProgramState
 initialize f = Program {
    stack      = Just [] -- fromListVector (Z :. stackSize) $ replicate stackSize Empty
@@ -138,6 +143,7 @@ getIns' True x | isAscii x = Just $ Character x
 (+|) :: Instructions Int Char -> Maybe [Instructions Int Char] -> Maybe [Instructions Int Char]
 (+|) x = liftM (x:)
 
+(|+|) :: Maybe (Instructions Int Char) -> Maybe [Instructions Int Char] -> Maybe [Instructions Int Char] 
 (|+|) = liftM2 (:)
 
 -- Stack
@@ -200,20 +206,18 @@ greaterThan = do p <- get
                    _                            -> put p{stack=Nothing} 
 
 ifEastWest :: BefungeState 
-ifEastWest = do p <- get
-                a <- pop
-                case a of
-                  Just (Num 0) -> goEast
-                  Nothing      -> return ()
-                  _            -> goWest
+ifEastWest = pop >>= \a ->
+                      case a of
+                      Just (Num 0) -> goEast
+                      Nothing      -> return ()
+                      _            -> goWest
 
 ifNorthSouth :: BefungeState 
-ifNorthSouth = do p <- get
-                  a <- pop
-                  case a of
-                    Just (Num 0) -> goSouth
-                    Nothing      -> return () 
-                    _            -> goNorth
+ifNorthSouth = pop >>= \a ->
+                        case a of
+                        Just (Num 0) -> goSouth
+                        Nothing      -> return () 
+                        _            -> goNorth
 
 addB :: BefungeState
 addB = do p <- get
@@ -258,28 +262,22 @@ divB = do p <- get
         divN (Num a) (Num b) = Num $ b `quot` a
 
 toggleString :: BefungeState
-toggleString = do p <- get
-                  put p{stringFlag= not $ stringFlag p}
+toggleString = get >>= \p -> put p{stringFlag= not $ stringFlag p}
 
 outChar :: BefungeState
-outChar = do p <- get
-             b <- pop
-             case b of
-               Just (Num a)       -> liftIO $ putChar $ chr a
-               Just (Character a) -> liftIO $ putChar a
-               Nothing            -> return () 
+outChar = pop >>= \b -> case b of
+                   Just (Num a)       -> liftIO $ putChar $ chr a
+                   Just (Character a) -> liftIO $ putChar a
+                   Nothing            -> return () 
 
 outNum :: BefungeState
-outNum = do p <- get
-            b <- pop
-            case b of
-              Just (Num a)       -> liftIO $ putChar $ intToDigit a
-              _                  -> return () 
-            liftIO $ putChar ' '
+outNum = pop >>= \b -> case b of
+                       Just (Num a)       -> liftIO $ putChar $ intToDigit a
+                       _                  -> return () 
+             >> (liftIO . putChar) ' '
 
 clear :: IO ()
-clear = do x <- getChar
-           unless (x == '\n') clear
+clear = getChar >>= \x -> unless (x == '\n') clear
 
 inChar :: BefungeState
 inChar = liftIO getChar >>= (push . Just . Character) >> liftIO clear
@@ -328,11 +326,6 @@ putB = do y <- pop
         getV (Just x) = lookup x $ map T.swap instructions
         getV _        = Nothing 
         
-        --case x of
-                   -- Just (Num a)       -> intToDigit a
-                   -- Just (Character a) -> a
-                   -- _                  -> argumentError
-
 evalBefunge :: BefungeState 
 evalBefunge = do
   cInstr <- getInst 
@@ -384,8 +377,6 @@ evalBefunge = do
   evalBefunge
 
 main :: IO ()
-main = do
-  [fn] <- getArgs
-  file <- readFile fn
-  let prog = initialize file
-  void $ runStateT evalBefunge prog
+main = getArgs >>= readFile . head 
+               >>= \x -> void $ runStateT evalBefunge  (initialize x)
+
