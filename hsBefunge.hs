@@ -12,6 +12,7 @@ import Control.Monad (unless)
 import Control.Monad.State
 
 import Data.Char (isAscii,isDigit,digitToInt,intToDigit,chr,ord)
+import qualified Data.Tuple as T
 
 import qualified Data.Array.Repa as R
 import Data.Array.Repa.Index
@@ -84,7 +85,7 @@ data Direction = North | East | South | West deriving (Eq)
 data ProgramState = Program {
    stack       :: Maybe [Instructions Int Char] -- Array V R.DIM1 (Instructions Int Char)
   ,direction   :: Direction  
-  ,fungeSpace  :: Array V R.DIM2 Char
+  ,fungeSpace  :: Maybe (Array V R.DIM2 Char)
   ,currentPos  :: DIM2
   ,stringFlag  :: Bool
 }
@@ -94,8 +95,8 @@ type BefungeState = StateT ProgramState IO ()
 stackSize  = 1024 :: Int
 befungeDim = (80,25) :: (Int,Int)
 
-parse ::  String -> Array V R.DIM2 Char
-parse x = fromListVector (Z :. snd befungeDim :. fst befungeDim)
+parse ::  String -> Maybe (Array V R.DIM2 Char)
+parse x = Just $ fromListVector (Z :. snd befungeDim :. fst befungeDim)
                            $ addEmptyRows $ foldr ((++) . fillUp) [] $ lines x
   where fillUp l = if length l < fst befungeDim
                    then l ++ replicate (fst befungeDim-length l) ' '
@@ -119,7 +120,9 @@ getInst = do p <- get
              let fS = fungeSpace p
                  cP = currentPos p
                  f  = stringFlag p
-             return $ getIns' f (fS R.! cP)
+             return $ case fS of
+                        Just fS -> getIns' f (fS R.! cP)
+                        Nothing -> Nothing
 
 getIns' :: Bool -> Char -> Maybe (Instructions Int Char)
 getIns' _ '"' = Just TStringMode
@@ -302,9 +305,9 @@ getB = do y <- pop
 
           p <- get
           let fS = fungeSpace p
-          case (x,y) of
-            (Just (Num j), Just (Num i)) -> push $ getIns' False $ fS R.! (Z :. i :. j)
-            _                            -> push Nothing
+          case (x,y,fS) of
+            (Just (Num j), Just (Num i), Just fS) -> push $ getIns' False $ fS R.! (Z :. i :. j)
+            _                                     -> push Nothing
 
 putB :: BefungeState
 putB = do y <- pop
@@ -314,18 +317,22 @@ putB = do y <- pop
           p <- get
           let fS = fungeSpace p
           
-          case (x,y) of
-            (Just (Num j), Just (Num i)) -> put p{fungeSpace=update fS (Z :. i :. j) v}
-            _                            -> argumentError
+          case (x,y, fS) of
+            (Just (Num j), Just (Num i), Just fS) -> put p{fungeSpace=update fS (Z :. i :. j) v}
+            _                                     -> argumentError
 
-  where update :: Array V R.DIM2 Char -> R.DIM2 -> Maybe (Instructions Int Char) -> Array V R.DIM2 Char
-        update fS a@(Z:.y:.x) i = R.computeS $ R.traverse fS id (\f b  -> if a == b 
-                                                                          then getV i
-                                                                          else f b)
-        getV x = case x of
-                   Just (Num a)       -> intToDigit a
-                   Just (Character a) -> a
-                   _                  -> argumentError
+  where update :: Array V R.DIM2 Char -> R.DIM2 -> Maybe (Instructions Int Char) -> Maybe (Array V R.DIM2 Char)
+        update fS a@(Z:.y:.x) i = do v <- getV i 
+                                     return $ R.computeS $ R.traverse fS id (\f b  -> if a == b 
+                                                                                      then v
+                                                                                      else f b)
+        getV (Just x) = lookup x $ map T.swap instructions
+        getV _        = Nothing 
+        
+        --case x of
+                   -- Just (Num a)       -> intToDigit a
+                   -- Just (Character a) -> a
+                   -- _                  -> argumentError
 
 evalBefunge :: BefungeState 
 evalBefunge = do
