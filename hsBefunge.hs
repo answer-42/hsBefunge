@@ -95,20 +95,22 @@ instructions =
 data Direction = North | East | South | West 
   deriving (Eq)
 
+type BefungeState = StateT ProgramState IO () 
+type Instruction = Instructions Int Char
+type FungeSpace = Array V R.DIM2 Char
+
 data ProgramState = Program {
-   stack       :: Maybe [Instructions Int Char] -- Array V R.DIM1 (Instructions Int Char)
+   stack       :: Maybe [Instruction] -- Array V R.DIM1 (Instructions Int Char)
   ,direction   :: Direction  
-  ,fungeSpace  :: Maybe (Array V R.DIM2 Char)
+  ,fungeSpace  :: Maybe FungeSpace
   ,currentPos  :: DIM2
   ,stringFlag  :: Bool
 }
 
-type BefungeState = StateT ProgramState IO () 
-
 stackSize  = 1024 :: Int
 befungeDim = (80,25) :: (Int,Int)
 
-parse ::  String -> Maybe (Array V R.DIM2 Char)
+parse ::  String -> Maybe FungeSpace
 parse x = Just $ fromListVector (Z :. snd befungeDim :. fst befungeDim)
                            $ addEmptyRows $ foldr ((++) . fillUp) [] $ lines x
   where fillUp l = l ++ replicate (max 0 (fst befungeDim-length l)) ' '
@@ -124,7 +126,7 @@ initialize f = Program {
   ,stringFlag = False
   }
 
-getInst :: StateT ProgramState IO (Maybe (Instructions Int Char))
+getInst :: StateT ProgramState IO (Maybe Instruction)
 getInst = do p <- get
              let fS = fungeSpace p
                  cP = currentPos p
@@ -133,30 +135,34 @@ getInst = do p <- get
                         Just fS -> getIns' f (fS R.! cP)
                         Nothing -> Nothing
 
-getIns' :: Bool -> Char -> Maybe (Instructions Int Char)
+getIns' :: Bool -> Char -> Maybe (Instruction)
 getIns' _ '"' = Just TStringMode
 getIns' False x | isDigit x = Just $ Num $ digitToInt x                
                 | otherwise = lookup x instructions
 getIns' True x | isAscii x = Just $ Character x
                | otherwise = lookup x instructions
 
-
-(+|) :: Instructions Int Char -> Maybe [Instructions Int Char] -> Maybe [Instructions Int Char]
+(+|) :: Instruction-> Maybe [Instruction] -> Maybe [Instruction]
 (+|) x =  fmap (x:) 
 
-(|+|) :: Maybe (Instructions Int Char) -> Maybe [Instructions Int Char] -> Maybe [Instructions Int Char] 
+(|+|) :: Maybe (Instruction) -> Maybe [Instruction] -> Maybe [Instruction] 
 (|+|) x y = (:) <$> x <*> y
 
 -- Stack
-push :: Maybe (Instructions Int Char) ->  BefungeState
+push :: Maybe Instruction ->  BefungeState
 push x = modify (\p -> p{stack=x|+|stack p})
 
-pop :: StateT ProgramState IO (Maybe (Instructions Int Char))
+pop :: StateT ProgramState IO (Maybe Instruction)
 pop = do p <- get
          let s = stack p
              v = liftM head s
-         put p{stack=liftM tail s}
+         put p{stack=tail <$> s}
          return v
+
+pop2 :: StateT ProgramState IO (Maybe Instruction, Maybe Instruction)
+pop2 = do a <- pop
+          b <- pop
+          return (a,b) 
 
 -- Evaluator
 
@@ -194,8 +200,7 @@ notB = do p <- get
 
 greaterThan :: BefungeState 
 greaterThan = do p <- get
-                 a <- pop
-                 b <- pop
+                 (a,b) <- pop2
                  let s = stack p
                  case (a,b) of
                    (Just (Num a), Just (Num b)) -> case compare a b of
@@ -219,32 +224,28 @@ ifNorthSouth = pop >>= \a ->
 
 addB :: BefungeState
 addB = do p <- get
-          a <- pop
-          b <- pop
+          (a,b) <- pop2
           let s = stack p
           put p{stack=liftM2 addN a b |+| s}
   where addN (Num a) (Num b) = Num $ a+b
 
 multB :: BefungeState
 multB = do p <- get
-           a <- pop
-           b <- pop
+           (a,b) <- pop2
            let s = stack p
            put p{stack=liftM2 multN a b |+| s}
   where multN (Num a) (Num b) = Num $ a*b
 
 minB :: BefungeState
 minB = do p <- get
-          a <- pop
-          b <- pop
+          (a,b) <- pop2
           let s = stack p
           put p{stack=liftM2 minN a b |+| s}
   where minN (Num a) (Num b) = Num $ a-b
 
 remainderB :: BefungeState
 remainderB = do p <- get
-                a <- pop
-                b <- pop
+                (a,b) <- pop2
                 let s = stack p
                 put p{stack=liftM2 remN a b |+| s}
   where remN (Num 0) (Num _) = Num 0 
@@ -252,15 +253,14 @@ remainderB = do p <- get
 
 divB :: BefungeState
 divB = do p <- get
-          a <- pop
-          b <- pop
+          (a,b) <- pop2
           let s = stack p
           put p{stack=liftM2 divN a b |+| s}
   where divN (Num 0) (Num _) = Num 0 
         divN (Num a) (Num b) = Num $ b `quot` a
 
 toggleString :: BefungeState
-toggleString = get >>= \p -> put p{stringFlag= not $ stringFlag p}
+toggleString = modify (\p -> p{stringFlag= not $ stringFlag p})
 
 outChar :: BefungeState
 outChar = pop >>= \b -> case b of
@@ -289,15 +289,12 @@ dup = do x <- pop
          push x
 
 swap :: BefungeState
-swap = do x <- pop
-          y <- pop
+swap = do (x,y) <- pop2
           push y
           push x
 
 getB :: BefungeState
-getB = do y <- pop
-          x <- pop
-
+getB = do (y,x) <- pop2
           p <- get
           let fS = fungeSpace p
           case (x,y,fS) of
@@ -305,10 +302,8 @@ getB = do y <- pop
             _                                     -> push Nothing
 
 putB :: BefungeState
-putB = do y <- pop
-          x <- pop
+putB = do (y,x) <- pop2
           v <- pop
-
           p <- get
           let fS = fungeSpace p
           
@@ -316,7 +311,7 @@ putB = do y <- pop
             (Just (Num j), Just (Num i), Just fS) -> put p{fungeSpace=update fS (Z :. i :. j) v}
             _                                     -> return () 
 
-  where update :: Array V R.DIM2 Char -> R.DIM2 -> Maybe (Instructions Int Char) -> Maybe (Array V R.DIM2 Char)
+  where update :: FungeSpace -> R.DIM2 -> Maybe Instruction -> Maybe FungeSpace
         update fS a@(Z:.y:.x) i = do v <- getV i 
                                      return $ R.computeS $ R.traverse fS id (\f b  -> if a == b 
                                                                                       then v
