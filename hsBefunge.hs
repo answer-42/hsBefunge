@@ -16,7 +16,7 @@ import System.Environment (getArgs)
 import System.Exit (exitSuccess,exitFailure)
 import System.IO
 
-import Control.Monad (unless)
+import Control.Monad (unless,fmap)
 import Control.Monad.State
 import Control.Applicative ((<$>),(<*>))
 
@@ -110,6 +110,7 @@ data ProgramState = Program {
 stackSize  = 1024 :: Int
 befungeDim = (80,25) :: (Int,Int)
 
+-- Parsing
 parse ::  String -> Maybe FungeSpace
 parse x = Just $ fromListVector (Z :. snd befungeDim :. fst befungeDim)
                            $ addEmptyRows $ foldr ((++) . fillUp) [] $ lines x
@@ -135,17 +136,18 @@ getInst = do p <- get
                         Just fS -> getIns' f (fS R.! cP)
                         Nothing -> Nothing
 
-getIns' :: Bool -> Char -> Maybe (Instruction)
+getIns' :: Bool -> Char -> Maybe Instruction
 getIns' _ '"' = Just TStringMode
 getIns' False x | isDigit x = Just $ Num $ digitToInt x                
                 | otherwise = lookup x instructions
 getIns' True x | isAscii x = Just $ Character x
                | otherwise = lookup x instructions
 
+-- Helpers
 (+|) :: Instruction-> Maybe [Instruction] -> Maybe [Instruction]
 (+|) x =  fmap (x:) 
 
-(|+|) :: Maybe (Instruction) -> Maybe [Instruction] -> Maybe [Instruction] 
+(|+|) :: Maybe Instruction -> Maybe [Instruction] -> Maybe [Instruction] 
 (|+|) x y = (:) <$> x <*> y
 
 -- Stack
