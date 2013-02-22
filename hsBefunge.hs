@@ -18,6 +18,7 @@ import System.IO
 
 import Control.Monad (unless)
 import Control.Monad.State
+import Control.Applicative ((<$>),(<*>))
 
 -- import Control.Arrow ((&&&))
 
@@ -141,16 +142,14 @@ getIns' True x | isAscii x = Just $ Character x
 
 
 (+|) :: Instructions Int Char -> Maybe [Instructions Int Char] -> Maybe [Instructions Int Char]
-(+|) x = liftM (x:)
+(+|) x =  fmap (x:) 
 
 (|+|) :: Maybe (Instructions Int Char) -> Maybe [Instructions Int Char] -> Maybe [Instructions Int Char] 
-(|+|) = liftM2 (:)
+(|+|) x y = (:) <$> x <*> y
 
 -- Stack
 push :: Maybe (Instructions Int Char) ->  BefungeState
-push x = do p <- get
-            let s = stack p
-            put p{stack=x|+|s}
+push x = modify (\p -> p{stack=x|+|stack p})
 
 pop :: StateT ProgramState IO (Maybe (Instructions Int Char))
 pop = do p <- get
@@ -162,17 +161,16 @@ pop = do p <- get
 -- Evaluator
 
 goSouth :: BefungeState
-goSouth = get >>= \p -> put p{direction=South}
+goSouth = modify (\p -> p{direction=South})
 
 goNorth :: BefungeState
-goNorth = get >>= \p -> put p{direction=North}
+goNorth = modify (\p -> p{direction=North})
 
 goEast :: BefungeState
-goEast = get >>= \p -> put p{direction=East}
+goEast = modify (\p -> p{direction=East})
 
 goWest :: BefungeState
-goWest = get >>= \p -> put p{direction=West}
-
+goWest = modify (\p -> p{direction=West})
 
 move :: BefungeState 
 move = let (x,y) = befungeDim
@@ -350,7 +348,7 @@ evalBefunge = do
     Just Mult         -> multB
     Just Min          -> minB
     Just Remainder    -> remainderB
-    Just Div          -> divB
+    Just Div         -> divB
 
     -- Working with Strings 
     Just TStringMode -> toggleString
