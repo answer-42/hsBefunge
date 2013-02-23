@@ -132,9 +132,7 @@ getInst = do p <- get
              let fS = fungeSpace p
                  cP = currentPos p
                  f  = stringFlag p
-             return $ case fS of
-                        Just fS -> getIns' f (fS R.! cP)
-                        Nothing -> Nothing
+             return $ maybe Nothing (\fS -> getIns' f (fS R.! cP)) fS
 
 getIns' :: Bool -> Char -> Maybe Instruction
 getIns' _ '"' = Just TStringMode
@@ -157,14 +155,12 @@ push x = modify (\p -> p{stack=x|+|stack p})
 pop :: StateT ProgramState IO (Maybe Instruction)
 pop = do p <- get
          let s = stack p
-             v = liftM head s
+             v = head <$> s
          put p{stack=tail <$> s}
          return v
 
 pop2 :: StateT ProgramState IO (Maybe Instruction, Maybe Instruction)
-pop2 = do a <- pop
-          b <- pop
-          return (a,b) 
+pop2 = (,) <$> pop <*> pop
 
 -- Evaluator
 
@@ -291,9 +287,9 @@ dup = do x <- pop
          push x
 
 swap :: BefungeState
-swap = do (x,y) <- pop2
-          push y
-          push x
+swap =  do (x,y) <- pop2
+           push y
+           push x
 
 getB :: BefungeState
 getB = do (y,x) <- pop2
@@ -308,7 +304,6 @@ putB = do (y,x) <- pop2
           v <- pop
           p <- get
           let fS = fungeSpace p
-          
           case (x,y, fS) of
             (Just (Num j), Just (Num i), Just fS) -> put p{fungeSpace=update fS (Z :. i :. j) v}
             _                                     -> return () 
@@ -318,8 +313,7 @@ putB = do (y,x) <- pop2
                                      return $ R.computeS $ R.traverse fS id (\f b  -> if a == b 
                                                                                       then v
                                                                                       else f b)
-        getV (Just x) = lookup x $ map T.swap instructions
-        getV _        = Nothing 
+        getV = (=<<) (`lookup` map T.swap instructions)
         
 evalBefunge :: BefungeState 
 evalBefunge = do
